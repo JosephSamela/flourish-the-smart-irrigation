@@ -8,13 +8,23 @@ const char* password = "<password";
 
 WebServer server(80);
 
-const int led = 13;
-const int relay = 5;
+const int led = 2;
+const int relay = 17;
+const int reset = 26;
+
+int requestedState = 0; // 0=OFF, 1=ON
+int currentState = 0;   // 0=OFF, 1=ON
 
 void setup(void) {
+  // Setup GPIO pin modes
+  pinMode(led, OUTPUT);
   pinMode(relay, OUTPUT);
+  pinMode(reset, OUTPUT);
+  // Initialize GPIO positions
+  digitalWrite(led, HIGH);
   digitalWrite(relay, HIGH);
-
+  digitalWrite(reset, HIGH);
+  
   Serial.begin(115200);
 
   // Connect to wifi
@@ -35,17 +45,34 @@ void setup(void) {
   }
 
   server.on("/", []() {
-    server.send(200, "text/plain", "Welcome to Joe's irrogation system!\n\nSend a GET request to `/on` to start irrigation.\nSend a GET request to `/off` to stop irrigation");
+    server.send(200, "text/plain", "Welcome to Joe's irrogation system!\n\nSend a GET request to `/on` to start irrigation.\nSend a GET request to `/off` to stop irrigation\n");
   });
 
   server.on("/on", []() {
     digitalWrite(relay, LOW);
-    server.send(200, "text/plain", "turn irrigation on");
+    server.send(200, "text/plain", "turn irrigation on\n");
   });
 
   server.on("/off", []() {
     digitalWrite(relay, HIGH);
-    server.send(200, "text/plain", "turn irrigation off");
+    server.send(200, "text/plain", "turn irrigation off\n");
+  });
+
+  server.on("/status", []() {
+    digitalWrite(led, HIGH);
+    server.send(200, "text/plain", "[{\"zone\":1,\"state\":"+ String(currentState) + "}]\n");
+    digitalWrite(led, LOW);
+  });
+
+  server.on("/setState", []() {
+    digitalWrite(led, HIGH);
+    
+    if (server.arg("zone").toInt() == 1) {
+      requestedState = server.arg("value").toInt();  
+    }
+
+    server.send(200, "text/plain", "[{\"zone\":1,\"state\":"+ String(currentState) + "}]\n");
+    digitalWrite(led, LOW);
   });
 
   server.onNotFound([]() {
@@ -69,7 +96,21 @@ void setup(void) {
   Serial.println("HTTP server started");
 }
 
+void toggleState() {
+  if (currentState == 0){
+    digitalWrite(relay, LOW);
+  } else if (currentState == 1){
+    digitalWrite(relay, HIGH);
+  }
+}
+
 void loop(void) {
   server.handleClient();
-  delay(100);//allow the cpu to switch to other tasks
+  
+  if (requestedState != currentState) {
+      toggleState();
+      currentState = requestedState;
+  }
+  
+  delay(10);//allow the cpu to switch to other tasks
 }
